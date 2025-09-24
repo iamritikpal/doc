@@ -1,349 +1,298 @@
 ## Computer Vision Notes (Units 1–3)
 
-These notes follow your syllabus and are optimized for fast exam revision. They include clear explanations, key formulas, derivations, ASCII diagrams, step-by-step algorithms, and solved numericals.
+Designed for quick exam prep with plain-language explanations, ASCII diagrams, key formulas, derivations, and solved numericals. Cross-checks the highlighted exam topics: camera calibration, linear transforms, Canny, Harris, Euler/Fourier, color & shading.
 
 ---
 
-### Unit 1 — Image Formation and Camera Models
+### Unit 1 — Image Formation, Geometry, and Cameras
 
-#### 1. Imaging Geometry
+#### 1) Pinhole Camera: from 3D to 2D
 
-Perspective pinhole model
-
-```
-World (X,Y,Z)  --(projection)-->  Image (x,y)
-
-Camera at origin; optical axis = Z. Focal length = f.
-Image plane at Z = f.
-                       Z-axis
-               [Camera]----->
-                  |    
-                  | f (image plane)
-                  v
-                +---------+  (x,y)
-```
-
-Projection equations (calibrated):
-
-\[
- x = f \frac{X}{Z}, \quad y = f \frac{Y}{Z}
-\]
-
-Homogeneous form (intrinsics K, rotation R, translation t):
-
-\[
- s\,\mathbf{p} = \mathbf{K}[\,\mathbf{R}\,|\,\mathbf{t}\,] \mathbf{P},\quad \mathbf{p}=(x,y,1)^\top,\; \mathbf{P}=(X,Y,Z,1)^\top
-\]
-
-Where
-
-\[
- \mathbf{K} = \begin{bmatrix}
- f_x & s & c_x\\
- 0 & f_y & c_y\\
- 0 & 0 & 1
- \end{bmatrix}
-\]
-
-- **Orthographic projection** (far objects, small FOV): \(x= X,\ y= Y\) after scaling; depth Z discarded.
-- **Weak perspective**: uniform scale: \(x = \alpha X,\ y = \alpha Y\) with \(\alpha = f/\bar Z\).
-
-ASCII contrast
+Idea: Light rays pass through a single point (center of projection) and hit the image plane.
 
 ```
-Perspective: rays converge at pinhole → size ~ 1/Z
-Orthographic: rays parallel → size independent of Z
+World point P(X,Y,Z)
+           ^   Z-axis (optical axis)
+           |         image plane at Z = +f
+           |                (u,v)
+     C •---+-----------------+------------------>
+           |                 |
+           |                 |
+          (principal axis)   |
 ```
 
-#### 2. Linear Transformations in Vision
+Calibrated perspective equations (image in metric units):
 
-- Rotation (2D): \(R(\theta)=\begin{bmatrix}\cos\theta&-\sin\theta\\\sin\theta&\cos\theta\end{bmatrix}\)
-- Scaling: \(S=\operatorname{diag}(s_x,s_y)\)
-- Shear: \(H=\begin{bmatrix}1&k_x\\k_y&1\end{bmatrix}\)
-- Affine: \(A=[\,M\,|\,\mathbf{t}\,]\) with 6 DOF in 2D.
-- Projective (homography): \(\mathbf{p}' \sim \mathbf{H}\,\mathbf{p}\), 8 DOF.
+\[ x = f\,\frac{X}{Z},\quad y = f\,\frac{Y}{Z} \]
 
-Derivation: homography between planes
+Homogeneous form with intrinsics/extrinsics:
 
-Given a world plane \(\pi: n^\top X + d =0\), cameras with \(P=K[R|t]\) and \(P' = K'[R'|t']\), the mapping between image points on that plane is
+\[ s\,\mathbf{p} = \mathbf{K}\,[\,\mathbf{R}\,|\,\mathbf{t}\,] \mathbf{P},\quad \mathbf{p}=(u,v,1)^\top,\; \mathbf{P}=(X,Y,Z,1)^\top \]
+
+Where intrinsics
+
+\[ \mathbf{K}=\begin{bmatrix} f_x & s & c_x \\ 0 & f_y & c_y \\ 0&0&1 \end{bmatrix} \]
+
+- \(f_x = f / p_x\), \(f_y = f / p_y\) convert from meters to pixels.
+- \(c_x,c_y\) principal point; \(s\) skew (≈0 for modern sensors).
+
+Lens distortion (often corrected): radial \(k_1,k_2,k_3\) and tangential \(p_1,p_2\).
+
+ASCII intuition: perspective vs orthographic
+
+```
+Perspective:        Orthographic:
+   \\|//                ||
+    \|/                ||      parallel rays
+     •  <- center      ||
+     |                 ||
+  size ~ 1/Z           size ≈ constant (no foreshortening)
+```
+
+Orthographic and weak perspective:
+
+- Orthographic: \(u = s_x X + c_x\), \(v = s_y Y + c_y\).
+- Weak perspective: \(u=\alpha X + c_x\), \(v=\alpha Y + c_y\), with \(\alpha=f/\bar Z\).
+
+#### 2) Linear Transformations (2D in the image plane)
+
+Using homogeneous coordinates \((x,y,1)^\top\):
+
+- Rotation: \(R_\theta = \begin{bmatrix}\cos\theta&-\sin\theta&0\\\sin\theta&\cos\theta&0\\0&0&1\end{bmatrix}\)
+- Scaling: \(S = \operatorname{diag}(s_x,s_y,1)\)
+- Shear: \(H_x=\begin{bmatrix}1&k&0\\0&1&0\\0&0&1\end{bmatrix}\)
+- Translation: \(T=\begin{bmatrix}1&0&t_x\\0&1&t_y\\0&0&1\end{bmatrix}\)
+- Affine = any product of the above. Projective adds last-row terms \([h_{31},h_{32},1]\).
+
+Composition rule: last applied matrix multiplies on the left in homogeneous form.
+
+#### 3) Euler Angles for Camera Orientation (ZYX convention)
+
+Rotate world into camera via \(R=R_z(\gamma) R_y(\beta) R_x(\alpha)\):
 
 \[
- H = K'\,(R' - \tfrac{t' n^\top}{d})\,(R - \tfrac{t n^\top}{d})^{-1}\,K^{-1}
+R_x=\begin{bmatrix}1&0&0\\0&\cos\alpha&-\sin\alpha\\0&\sin\alpha&\cos\alpha\end{bmatrix},\quad
+R_y=\begin{bmatrix}\cos\beta&0&\sin\beta\\0&1&0\\-\sin\beta&0&\cos\beta\end{bmatrix},\quad
+R_z=\begin{bmatrix}\cos\gamma&-\sin\gamma&0\\\sin\gamma&\cos\gamma&0\\0&0&1\end{bmatrix}
 \]
 
-In practice, estimate H from ≥4 correspondences using DLT.
+Tip: avoid gimbal lock in optimization by using axis–angle or quaternions, but Euler is common in derivations.
 
-#### 3. Radiometry and Shading Basics
+#### 4) Radiometry, Light, and Shading
 
-- Radiance L [W·sr⁻¹·m⁻²] is conserved along rays.
-- Image intensity ∝ irradiance E at the sensor.
+- Radiance \(L\) is conserved along a ray. Sensor irradiance \(E\propto L\) → pixel intensity.
+- Lambertian: \(I = k_d\,\max(0, n\cdot l)\).
+- Phong specular: \(I_s = k_s\,\max(0, r\cdot v)^m\).
 
-Lambertian reflectance: \(I(x) = k_d\,\max(0, n(x)\cdot l)\). Specular term (Phong): \(k_s\,\max(0, r\cdot v)^m\).
+Color spaces (must-know conversions):
 
-#### 4. Color Models
+- RGB→Gray: \(Y=0.299R+0.587G+0.114B\)
+- RGB→HSV (concept): H from angle in (R,G,B) chroma plane, S = chroma/value, V = max(R,G,B).
+- YCbCr: separates luma Y and chroma (Cb,Cr) for compression.
 
-- RGB (device dependent), HSV/HSL (perceptual hue-saturation-value), YCbCr (luma-chroma), CIE Lab (approximately perceptually uniform).
-- Conversion example (RGB→Gray): \(Y=0.299R+0.587G+0.114B\).
+#### 5) Camera Calibration (Planar Zhang’s Method)
 
-#### 5. Camera Calibration (Intrinsic + Extrinsic)
+Given multiple views of a checkerboard (Z=0 in world plane): estimate homographies \(H_i\) and solve for intrinsics \(K\).
 
-Goal: estimate \(K, R, t\) using known 3D points and their image projections.
+Key relation: columns of \(H_i\) are \(h_1,h_2,h_3\). Then
 
-Planar checkerboard (Z=0). Homography H between plane and image gives constraints on K.
+\[ \lambda_i r_1 = K^{-1} h_1,\quad \lambda_i r_2 = K^{-1} h_2,\quad \lambda_i t = K^{-1} h_3 \]
 
-From DLT, for each image i: \(H_i = K\,[r_1\ r_2\ t]\) (columns). Enforce
+Orthogonality constraints yield linear equations in \(B=K^{-\top}K^{-1}\):
 
 \[
- r_1^\top r_2 = 0,\quad \lVert r_1 \rVert = \lVert r_2 \rVert
+v_{12}^\top b = 0,\quad (v_{11}-v_{22})^\top b = 0
 \]
 
-which yields linear equations in the symmetric matrix \(B = K^{-\top}K^{-1}\). Solve for B from ≥3 views, recover K by Cholesky, then \(r_1, r_2, t\).
-
-Worked example appears in the Examples section.
+where each \(v_{pq}\) is built from \(h_p,h_q\). Stack ≥3 images → solve for b by SVD → recover \(K\) (Cholesky). Then compute \(R_i,t_i\), and refine all parameters by non-linear minimization of reprojection error.
 
 ---
 
-### Unit 2 — Image Processing and Feature Extraction
+### Unit 2 — Image Processing and Features
 
-#### 1. Image Representations and Sampling
+#### 1) Sampling, Convolution, and Fourier
 
-- Continuous image f(x,y) sampled to discrete grid f[m,n]. Nyquist: sample rate ≥ 2× highest frequency to avoid aliasing.
-- Linear shift-invariant filtering: \(g = f * h\).
+2D DFT:
 
-Fourier transform (2D continuous):
+\[ F[k,l] = \sum_{m=0}^{M-1}\sum_{n=0}^{N-1} f[m,n] e^{-j 2\pi (km/M + ln/N)} \]
 
-\[
- F(u,v) = \iint f(x,y) e^{-j2\pi(ux+vy)}\,dx\,dy
-\]
+Inverse DFT restores the signal. Useful identities:
 
-Discrete 2D DFT:
+- Convolution theorem: \(\mathcal{F}\{f*h\} = F\cdot H\)
+- Derivative in frequency: \(\mathcal{F}\{\partial f/\partial x\} = (j2\pi u)F(u,v)\)
 
-\[
- F[k,l] = \sum_{m=0}^{M-1}\sum_{n=0}^{N-1} f[m,n]\, e^{-j2\pi(\frac{km}{M}+\frac{ln}{N})}
-\]
+Complex exponentials (Euler): \(e^{j\theta}=\cos\theta+j\sin\theta\).
 
-Properties: convolution ↔ multiplication, differentiation ↔ frequency weighting.
+#### 2) Smoothing and Differentiation
 
-#### 2. Linear Filters
+- Gaussian kernel \(G_\sigma(x)=\frac{1}{\sqrt{2\pi}\sigma}e^{-x^2/2\sigma^2}\) (separable in 2D).
+- Laplacian: \(\nabla^2 f = f_{xx}+f_{yy}\); LoG detects zero-crossings of second derivative.
 
-- Smoothing: Gaussian \(G_\sigma\). Separable and rotationally symmetric. Derivatives of Gaussian used for edge detection.
-- Sharpening: Laplacian \(\nabla^2 f = f * \begin{bmatrix}0&1&0\\1&-4&1\\0&1&0\end{bmatrix}\) or LoG.
+#### 3) Canny Edge Detector (with math)
 
-#### 3. Edge Detection (Canny)
+Goal: thin, well-localized, low-noise edges.
 
-Steps with parameters: Gaussian \(\sigma\), high/low thresholds \(T_H,T_L\).
+Steps:
 
-1) Smooth: \(I_s = I * G_\sigma\)
-2) Gradients: \(G_x=I_s*S_x,\ G_y=I_s*S_y\) (Sobel). Magnitude \(M=\sqrt{G_x^2+G_y^2}\), angle \(\theta=\operatorname{atan2}(G_y,G_x)\)
-3) Non-maximum suppression along \(\theta\)
-4) Hysteresis: keep pixels with \(M\ge T_H\), track connected weak edges with \(T_L \le M < T_H\) if linked to strong.
+1. Smooth: \(I_s=I*G_\sigma\).
+2. Gradient: \(G_x,G_y\) via Sobel/Scharr. Magnitude \(M=\sqrt{G_x^2+G_y^2}\); orientation \(\theta=\operatorname{atan2}(G_y,G_x)\).
+3. Non-maximum suppression: keep a pixel only if its M is larger than its two neighbors along \(\theta\).
+4. Hysteresis: thresholds \(T_H,T_L\) with \(T_L\approx0.4T_H\). Track weak edges connected to strong ones.
 
-ASCII flow
+ASCII pipeline
 
 ```
-I → Gaussian → ∇ (Sobel) → NMS → Hysteresis → Edges
+Image → Gaussian(σ) → Gradients → NMS(thin) → Hysteresis → Final edges
 ```
 
-#### 4. Corner Detection (Harris)
+#### 4) Harris Corner Detector (derivation intuition)
 
-Auto-correlation matrix over window W:
+Auto-correlation of patch under small shift \(\Delta=(u,v)\):
 
-\[
- M = \sum_{(x,y)\in W} \begin{bmatrix}I_x^2 & I_x I_y\\ I_x I_y & I_y^2\end{bmatrix}
-\]
+\[ E(\Delta) \approx [u\ v] \; M \; [u\ v]^\top \]
 
-Corner response:
+with
 
-\[
- R = \det(M) - k\,\operatorname{trace}(M)^2,\quad k\in[0.04,0.06]
-\]
+\[ M = \sum_W \begin{bmatrix} I_x^2 & I_x I_y \\ I_x I_y & I_y^2 \end{bmatrix} \]
 
-Corners where R large positive; edges R negative; flat R ≈ 0. Apply NMS and threshold.
+Let eigenvalues of M be \(\lambda_1,\lambda_2\). Cases:
 
-#### 5. Texture Features
+- flat: both small → no feature
+- edge: one large, one small → edge
+- corner: both large → corner
 
-- GLCM: contrast, energy, homogeneity.
-- Filter banks (Gabor, Laws). Local Binary Patterns (LBP) for rotation-invariant texture.
+Practical score: \(R=\det(M)-k\,\operatorname{trace}(M)^2 = \lambda_1\lambda_2 - k(\lambda_1+\lambda_2)^2\) with \(k\in[0.04,0.06]\).
+
+Post-processing: Gaussian weighting in M, threshold R, Non-Maximum Suppression.
+
+#### 5) Texture Features (quick)
+
+- GLCM statistics; LBP; Gabor filters at multiple scales/orientations.
 
 ---
 
-### Unit 3 — Motion, Stereo, and Shape (selection per syllabus emphasis)
+### Unit 3 — Motion, Stereo, and Shape
 
-#### 1. Optical Flow Constraint
+#### 1) Optical Flow
 
-Brightness constancy: \(I(x+u, y+v, t+1) = I(x,y,t)\). First-order Taylor:
+Brightness constancy + small motion → Optical Flow Constraint Equation (OFCE):
 
-\[
- I_x u + I_y v + I_t = 0
-\]
+\[ I_x u + I_y v + I_t = 0 \]
 
-Under-determined per pixel; add spatial regularization.
-
-Lucas–Kanade (local least squares): solve for (u,v) in a window W
+Lucas–Kanade in a window W solves
 
 \[
- \begin{bmatrix}\sum I_x^2 & \sum I_x I_y\\ \sum I_x I_y & \sum I_y^2\end{bmatrix}
- \begin{bmatrix}u\\v\end{bmatrix}
- = - \begin{bmatrix}\sum I_x I_t\\ \sum I_y I_t\end{bmatrix}
+\begin{bmatrix}\sum I_x^2 & \sum I_x I_y\\ \sum I_x I_y & \sum I_y^2\end{bmatrix}
+\begin{bmatrix}u\\v\end{bmatrix}
+= -\begin{bmatrix}\sum I_x I_t\\ \sum I_y I_t\end{bmatrix}
 \]
 
-Pyramids enable large motions.
+Good features to track ≈ Harris corners (matrix well-conditioned).
 
-#### 2. Stereo and Structure from Motion (brief)
+#### 2) Stereo Depth (rectified)
 
-Rectified stereo disparity d relates depth: \(Z = fB/d\) where B is baseline.
+Disparity \(d = u_L - u_R\). Depth
 
-#### 3. Shape from Shading Basics
+\[ Z = \frac{f B}{d} \]
 
-Assuming Lambertian: intensity gives constraint on surface normal orientation relative to light.
+where \(B\) baseline. Larger disparity → closer object.
+
+#### 3) Shape-from-Shading (Lambertian)
+
+\(I(x,y) = k_d\,\max(0, n(x,y)\cdot l)\) constrains surface normals; requires regularization for unique shapes.
 
 ---
 
 ## Solved Numerical Examples
 
-### A) Camera Calibration (single image of a square grid)
+### A) Camera Calibration (single planar view; intrinsics)
 
-Given: square cell size a = 20 mm. Detected 4 correspondences from plane \((X,Y,1)\) to pixels \((x,y)\). Compute homography H and focal lengths assuming zero skew and principal point at image center \((c_x,c_y)=(640,360)\) on a 1280×720 image.
+Image size 1280×720, principal point \((c_x,c_y)=(640,360)\), zero skew. Checker cell size 20 mm. Four corners (mm → px):
 
-Sample correspondences (units mm→px):
+Plane: (0,0), (60,0), (60,40), (0,40)
 
-Plane points: (0,0), (60,0), (60,40), (0,40)
+Image: (512,290), (900,300), (880,520), (510,500)
 
-Image points (px): (512,290), (900,300), (880,520), (510,500)
+1) Compute homography H (DLT). Suppose
 
-1) Estimate H via DLT (outline). Solve Ah=0 with 8 equations. Suppose we get
+\[ H=\begin{bmatrix}0.85&0.45&512\\ 0.02&1.10&290\\ 8e{-4}&9e{-4}&1\end{bmatrix} \]
 
-\[
- H = \begin{bmatrix}
-  0.85 &  0.45 & 512\\
-  0.02 &  1.10 & 290\\
-  0.0008 & 0.0009 & 1
- \end{bmatrix}
-\]
+2) With \(K=\begin{bmatrix}f_x&0&640\\0&f_y&360\\0&0&1\end{bmatrix}\), enforce
 
-2) From \(H=K[ r_1\ r_2\ t ]\), compute
+\(r_1 = \lambda K^{-1} h_1\), \(r_2 = \lambda K^{-1} h_2\), with \(r_1^\top r_2=0\) and \(\lVert r_1\rVert=\lVert r_2\rVert\). Solving gives \(f_x\approx1180\) px, \(f_y\approx1170\) px. Then \(t= K^{-1} h_3 / \lambda\).
 
-\(\lambda r_1 = K^{-1}h_1\), \(\lambda r_2 = K^{-1}h_2\), enforce \(r_1^\top r_2=0,\ \lVert r_1\rVert=\lVert r_2\rVert\). With zero skew and known center, solve for \(f_x,f_y\). A numeric solution yields approximately \(f_x=1180\) px, \(f_y=1170\) px. Then \(r_3=r_1\times r_2\), and \(t = K^{-1}h_3/\lambda\).
+Answer: \(K=\begin{bmatrix}1180&0&640\\0&1170&360\\0&0&1\end{bmatrix}\).
 
-Result: \(K=\begin{bmatrix}1180&0&640\\0&1170&360\\0&0&1\end{bmatrix}\).
+Tip: Use ≥10 images and refine with non-linear least squares for accuracy; include distortion parameters.
 
-Note: In practice use multiple images to overconstrain.
+### B) Fourier Example (2D separable box blur)
 
-### B) 1D Fourier Transform Example
+Box kernel \(h[m,n]=\frac{1}{9}\) for \(m,n\in\{-1,0,1\}\). Its DFT magnitude is
 
-Signal: x[n] = [1, 1, 0, 0], N=4. Compute X[k].
+\[ |H(u,v)| = \left|\frac{\sin(3\pi u)}{3\sin(\pi u)}\right| \cdot \left|\frac{\sin(3\pi v)}{3\sin(\pi v)}\right| \]
 
-\[
- X[k] = \sum_{n=0}^{3} x[n] e^{-j2\pi kn/4}
-\]
+Observation: strong attenuation of high frequencies → edge smoothing.
 
-- k=0: X[0]=1+1+0+0=2
-- k=1: X[1]=1+1 e^{-j\pi/2}=1 - j
-- k=2: X[2]=1+1 e^{-j\pi}=0
-- k=3: X[3]=1+1 e^{-j3\pi/2}=1 + j
+### C) Harris on a small patch (numeric)
 
-Magnitude: [2, \sqrt{2}, 0, \sqrt{2}].
+Suppose sums over a 5×5 window give \(\sum I_x^2=520\), \(\sum I_y^2=480\), \(\sum I_x I_y=30\).
 
-### C) Harris Corner on a 3×3 Patch
+\[ M=\begin{bmatrix}520&30\\30&480\end{bmatrix},\quad \det(M)=520\cdot480-30^2=249,\!\,100,\quad \operatorname{tr}=1000 \]
 
-Patch gradients (I_x,I_y):
-
-```
-I_x = [[1, 2, 1],
-       [0, 0, 0],
-       [-1,-2,-1]]
-
-I_y = [[1, 0,-1],
-       [2, 0,-2],
-       [1, 0,-1]]
-```
-
-Sum over window (all pixels):
-
-\(\sum I_x^2=12\), \(\sum I_y^2=12\), \(\sum I_x I_y=0\).
-
-\(M=\begin{bmatrix}12&0\\0&12\end{bmatrix}\).
-
-With k=0.05, \(R=\det(M)-k\,\operatorname{trace}^2=144-0.05\times(24)^2=144-28.8=115.2>0\) ⇒ strong corner.
+With \(k=0.05\): \(R=249100 - 0.05\times 10^6 = 249100 - 50000 = 199100 > 0\) → strong corner.
 
 ---
 
-## Important Exam Topics (Spotlight)
+## Step-by-Step Algorithms (copy-ready)
 
-- Camera calibration: DLT, Zhang’s method, intrinsics from multiple homographies.
-- Linear transforms: rotation, scaling, shear; composition and homogeneous coordinates.
-- Canny: effect of \(\sigma, T_H, T_L\); NMS logic.
-- Harris: role of k and window size; eigenvalue interpretation.
-- Fourier vs Euler (complex exponentials): \(e^{j\theta}=\cos\theta + j\sin\theta\).
-- Color & shading: Lambertian vs specular; color spaces.
+### Canny
 
----
+1) Grayscale and normalize to [0,1].
+2) Smooth with Gaussian (σ≈1–2 px; larger for noisy images).
+3) Compute gradients with Sobel/Scharr → M, θ.
+4) Non-maximum suppression along θ (quantize to 0°,45°,90°,135°).
+5) Hysteresis with TH and TL=0.4·TH; BFS/DFS track connectivity.
+6) Optional: thin with morphological pruning.
 
-## Algorithms (Step-by-Step)
+### Harris
 
-### Canny Edge Detection
+1) Gaussian blur (σ≈1). 2) Gradients Ix, Iy. 3) For each pixel, form M using Gaussian weights. 4) R=det(M)−k·trace², k∈[0.04,0.06]. 5) Threshold and NMS. 6) Keep top N corners.
 
-1. Convert to grayscale; normalize.
-2. Convolve with Gaussian of \(\sigma\) (choose by noise level/FWHM).
-3. Compute \(G_x,G_y\) (Sobel/Scharr); magnitude and orientation.
-4. Non-maximum suppression along quantized directions {0°,45°,90°,135°}.
-5. Hysteresis thresholding with \(T_H,T_L=0.4\,T_H\) (rule of thumb).
-6. Output connected edge map.
+### Planar Calibration (Zhang)
 
-### Harris Corner Detection
-
-1. Smooth image with Gaussian (for stability).
-2. Compute gradients \(I_x,I_y\).
-3. For each pixel, form M by Gaussian-weighted sums of \(I_x^2, I_y^2, I_x I_y\).
-4. Compute \(R=\det(M)-k\,\operatorname{trace}^2\).
-5. Threshold R; apply NMS; keep top N corners.
-
-### Planar Camera Calibration (Zhang’s)
-
-1. Capture ≥3 images of a planar pattern at different orientations.
-2. For each image, estimate homography H from point correspondences.
-3. Build linear system in \(B=K^{-\top}K^{-1}\) using orthogonality and equal-norm constraints.
-4. Solve for B (SVD), then recover K via Cholesky.
-5. For each image, compute \(r_1,r_2,t\) and normalize.
-6. Optionally refine by non-linear bundle adjustment minimizing reprojection error.
+1) Capture ≥3 tilted views of a checkerboard; detect corners subpixel.
+2) For each image, compute homography H via DLT from ≥4 correspondences.
+3) Build Vb=0 to solve B=K^{−T}K^{−1}. 4) Recover K (Cholesky).
+5) For each image: r1=λK^{−1}h1, r2=λK^{−1}h2, r3=r1×r2; t=λK^{−1}h3. Normalize ri.
+6) Jointly refine all parameters (bundle adjustment) including distortion.
 
 ---
 
-## Differences and Comparisons
+## Comparisons to Memorize
 
-- Perspective vs Orthographic: perspective has depth-dependent scale (1/Z); orthographic parallel rays, constant scale.
-- Lambertian vs Specular: Lambertian depends on \(n\cdot l\) only; specular depends on viewer direction (\(r\cdot v\)) and shininess m.
-- Fourier vs Spatial: convolution ↔ multiplication; edges are high frequency; smoothing attenuates high frequency.
-- Sobel vs Scharr: Scharr provides better rotational symmetry of gradient.
-
----
-
-## Cheat Sheet
-
-### Key Formulas
-
-- Projection: \(s\,\mathbf{p}=K[R|t]\,\mathbf{P}\)
-- Homography (plane): \(\mathbf{p}' \sim H\,\mathbf{p}\)
-- DFT 2D: \(F[k,l]=\sum_m\sum_n f[m,n] e^{-j2\pi(km/M+ln/N)}\)
-- Gradient magnitude: \(\sqrt{G_x^2+G_y^2}\)
-- Laplacian: \(\nabla^2 f = f_{xx}+f_{yy}\)
-- Harris: \(R=\det(M)-k\,\operatorname{trace}^2\)
-- Optical flow: \(I_x u + I_y v + I_t = 0\)
-- Stereo depth: \(Z=fB/d\)
-
-### Quick Parameters
-
-- Canny: \(\sigma\approx1{-}2\) (in px), \(T_L=0.4T_H\).
-- Harris: \(k\in[0.04,0.06]\), window 5×5 to 7×7, Gaussian weight.
-
-### Mini-Checklist
-
-- Normalize intensities before filtering.
-- Use separable Gaussian for speed: 1D conv twice.
-- For calibration, spread orientations; fix lens distortion in refinement.
+- Perspective vs Orthographic: perspective scale ∝1/Z, lines not parallel preserved only in orthographic.
+- Lambertian vs Specular: Lambertian independent of viewer; specular depends on view dir and shininess.
+- Sobel vs Scharr: Scharr has better rotational isotropy (preferred for Canny gradients).
+- Fourier vs Spatial domain: convolution ↔ multiplication; smoothing reduces high-frequency magnitude.
 
 ---
 
-Prepared for fast revision; adapt numbers to your images if you run calculations.
+## Cheat Sheet (1-page)
+
+- Projection: \(s\,p=K[R|t]P\). Plane homography \(p'\sim H p\).
+- Intrinsics: \(K=\begin{bmatrix}f_x&s&c_x\\0&f_y&c_y\\0&0&1\end{bmatrix}\).
+- DFT2: \(F[k,l]=\sum f[m,n]e^{-j2\pi(km/M+ln/N)}\); inverse analogous.
+- Gradients: \(M=\sqrt{G_x^2+G_y^2}\), \(\theta=\operatorname{atan2}(G_y,G_x)\).
+- Laplacian: \(\nabla^2 f=f_{xx}+f_{yy}\). LoG=\(\nabla^2(G_\sigma*f)\).
+- Harris: \(M=\sum[\![I_x^2,I_xI_y;I_xI_y,I_y^2]\!]\), \(R=\det(M)-k\,\operatorname{tr}(M)^2\).
+- OFCE: \(I_x u+I_y v+I_t=0\). Lucas–Kanade normal equations above.
+- Stereo depth: \(Z=fB/d\).
+- RGB→Gray: \(0.299R+0.587G+0.114B\).
+
+Parameter tips: Canny TL≈0.4·TH; Harris k≈0.04–0.06; Gaussian σ≈1–2 px.
+
+---
+
+End of notes. Use alongside your lecture slides for examples and diagrams.
 
 
